@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Painel de Leitura</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      text-align: center;
+      background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+      padding: 40px;
+    }
+
+    .painel-entrada, .container {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      max-width: 600px;
+      margin: auto;
+      display: none;
+    }
+
+    .painel-entrada.active, .container.active {
+      display: block;
+    }
+
+    h2 {
+      font-size: 24px;
+      color: #1565c0;
+      margin-bottom: 15px;
+    }
+
+    textarea, input[type="text"], input[type="password"], select {
+      width: 90%;
+      padding: 12px;
+      margin: 10px auto;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      margin: 10px;
+      padding: 12px 18px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .entrar { background-color: #1976d2; color: white; }
+    .play { background-color: #28a745; color: white; }
+    .pause { background-color: #ff9800; color: white; }
+    .stop { background-color: #d32f2f; color: white; }
+  </style>
+</head>
+<body onload="assistenteVoz()">
+
+  <!-- TELA DE LOGIN -->
+  <div class="painel-entrada active" id="entrada">
+    <h2>🔐 Acesso ao Painel de Leitura</h2>
+    <p>Digite suas credenciais para continuar:</p>
+    <input type="text" id="userLogin" placeholder="👤 Usuário">
+    <input type="password" id="userSenha" placeholder="🔒 Senha">
+    <input type="text" id="userName" placeholder="📛 Nome para saudação">
+    <br>
+    <button class="entrar" onclick="verificarUsuario()">Entrar</button>
+  </div>
+
+  <!-- CONTEÚDO PRINCIPAL -->
+  <div class="container" id="painel">
+    <h2>📖 Leitura Inteligente de Textos</h2>
+    <p id="instrucao"><strong>Assistente de Voz:</strong> Bem-vindo(a).</p>
+
+    <label>Digite ou Cole um Texto:</label>
+    <textarea id="textInput" placeholder="Cole seu texto aqui..."></textarea>
+    <input type="file" id="fileInput"><br>
+
+    <input type="text" id="tokenInput" placeholder="🔒 Digite seu token de acesso" />
+    <select id="vozModo">
+      <option value="nativa">🎤 Voz do Navegador</option>
+      <option value="api">🔊 API de Voz de Terceiros</option>
+    </select><br>
+
+    <button class="play" onclick="lerTexto()">🔊 Iniciar Leitura</button>
+    <button class="pause" onclick="pausarLeitura()">⏸️ Pausar</button>
+    <button class="play" onclick="continuarLeitura()">▶️ Continuar</button>
+    <button class="stop" onclick="pararLeitura()">❌ Excluir</button><br><br>
+    <button onclick="iniciarReconhecimentoVoz()">🎤 Ativar Comandos de Voz</button>
+  </div>
+
+  <script>
+    let synth = window.speechSynthesis;
+    let utterance;
+    let isPaused = false;
+    let vozSelecionada = null;
+
+    const USUARIO_VALIDO = "vml!#!#";
+    const SENHA_VALIDA = "!#!#";
+    const TOKEN_VALIDO = "meu-token-secreto";
+
+    function carregarVozes() {
+      const voices = synth.getVoices();
+      vozSelecionada = voices.find(voice => voice.lang === "pt-BR" && voice.name.toLowerCase().includes("feminina")) 
+                    || voices.find(voice => voice.lang === "pt-BR") 
+                    || voices[0];
+    }
+    synth.onvoiceschanged = carregarVozes;
+
+    function assistenteVoz() {
+      const mensagem = "Bem-vindo. Por favor, faça login para acessar o painel.";
+      let voz = new SpeechSynthesisUtterance(mensagem);
+      voz.lang = "pt-BR";
+      voz.voice = vozSelecionada;
+      synth.speak(voz);
+    }
+
+    function verificarUsuario() {
+      const login = document.getElementById("userLogin").value.trim();
+      const senha = document.getElementById("userSenha").value.trim();
+      const nome = document.getElementById("userName").value.trim();
+
+      if (login === USUARIO_VALIDO && senha === SENHA_VALIDA && nome !== "") {
+        document.getElementById("entrada").classList.remove("active");
+        document.getElementById("painel").classList.add("active");
+        document.getElementById("instrucao").innerText = `Olá, ${nome}! Pronto para iniciar a leitura?`;
+
+        let voz = new SpeechSynthesisUtterance(`Olá, ${nome}. Bem-vindo ao painel de leitura inteligente.`);
+        voz.lang = "pt-BR";
+        voz.voice = vozSelecionada;
+        synth.speak(voz);
+      } else {
+        alert("❌ Usuário, senha ou nome inválido.");
+      }
+    }
+
+    function validarToken() {
+      const token = document.getElementById("tokenInput").value.trim();
+      if (token === "") {
+        alert("⚠️ Token não inserido. Continuando com voz nativa do navegador.");
+        document.getElementById("vozModo").value = "nativa";
+        return true;  // Continuar com a voz nativa se o token não for inserido
+      }
+      if (token !== TOKEN_VALIDO) {
+        alert("🔒 Token inválido! Acesso negado.");
+        return false;
+      }
+      return true;
+    }
+
+    function lerTexto() {
+      if (!validarToken()) return;
+      let text = document.getElementById("textInput").value;
+      if (text.trim() === "") return;
+
+      pararLeitura();
+      let modo = document.getElementById("vozModo").value;
+
+      if (modo === "nativa") {
+        utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "pt-BR";
+        utterance.voice = vozSelecionada;
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        utterance.onend = () => isPaused = false;
+        synth.speak(utterance);
+      } else {
+        alert("🔊 Texto enviado para API de voz de terceiros (simulado).");
+      }
+    }
+
+    function pausarLeitura() {
+      if (synth.speaking && !synth.paused) {
+        synth.pause();
+        isPaused = true;
+      }
+    }
+
+    function continuarLeitura() {
+      if (isPaused) {
+        synth.resume();
+        isPaused = false;
+      }
+    }
+
+    function pararLeitura() {
+      synth.cancel();
+      isPaused = false;
+    }
+
+    document.getElementById("fileInput").addEventListener("change", function(event) {
+      let file = event.target.files[0];
+      if (file) {
+        let reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById("textInput").value = e.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    let recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = "pt-BR";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+
+    function iniciarReconhecimentoVoz() {
+      recognition.start();
+      recognition.onresult = function(event) {
+        let comando = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+        console.log("Comando reconhecido:", comando);
+        if (comando.includes("iniciar leitura")) {
+          lerTexto();
+        } else if (comando.includes("pausar")) {
+          pausarLeitura();
+        } else if (comando.includes("continuar")) {
+          continuarLeitura();
+        } else if (comando.includes("excluir")) {
+          pararLeitura();
+        }
+      };
+    }
+  </script>
+</body>
+</html>
